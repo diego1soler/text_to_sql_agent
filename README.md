@@ -1,4 +1,4 @@
-# Solera Text-to-SQL Agent
+# NOTE
 
 I built and deployed a system like this against production data at the biggest telecom company in Guatemala. That work isn't public, so this repo rebuilds the same architecture on a synthetic dataset — Solera, a fictional digital marketplace with generated users, events and transactions.
 
