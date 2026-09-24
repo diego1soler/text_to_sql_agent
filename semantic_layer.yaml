@@ -1,0 +1,154 @@
+# ============================================================================
+#                     SOLERA SEMANTIC LAYER
+# This file serves as the business context for the Solera database agent.
+# It defines the tables, columns, metrics, and rules that the agent will use to interpret and answer 
+# questions about the data.
+# It is injected during the agent's initialization.
+# ============================================================================
+
+dialect: postgres
+
+tables:
+  - name: solera_transactions_enriched
+    description: >
+      A view and the preferred starting point for most questions. One row per
+      purchased line item, already joined to product, merchant and user. Use
+      this unless you specifically need columns that are not contained in it.
+    columns:
+      transaction_id: Primary key.
+      user_id: Buyer ID.
+      session_id: Groups line items bought in the same checkout.
+      transaction_date: When the purchase happened (timestamptz).
+      page: App route where the purchase was initiated.
+      merchant: Merchant name, e.g. Nimbus Cloud and any other merchant in the catalog.
+      product_name: Product name, e.g. Nimbus Storage 500GB.
+      category: subscription | one_time | top_up | add_on
+      quantity: Units bought in this line item.
+      unit_price: Price per unit at the time of sale.
+      amount: quantity * unit_price. Gross, not net.
+      currency: EUR, GBP or USD. See the currency warning below.
+      payment_method: card | paypal | apple_pay | bank_transfer | wallet or any other method in the data.
+      status: pending | completed | failed | refunded
+      device_type: mobile | desktop | tablet
+      country: ISO-2 country of the buyer.
+      acquisition_channel: organic | paid_search | paid_social | referral | partner
+      plan_tier: free | plus | pro
+      signup_date: When the user registered.
+
+  - name: events
+    description: >
+      Every session, including ones that never purchased. This is the only place
+      non-converting behaviour is recorded, so all funnel and conversion
+      questions must come from here.
+    columns:
+      session_id: Join key to transactions.
+      event_time: When the event occurred.
+      event_type: page_view | product_view | add_to_cart | checkout_start | purchase | checkout_abandon
+      page: App route.
+      product_id: Set on product_view, add_to_cart and purchase; null otherwise.
+      device_type: Device for the session.
+      country: ISO-2 country.
+      referrer: External referrer URL, often null.
+
+  - name: users
+    description: One row per registered user. Join on user_id.
+  - name: products
+    description: Catalog. 15 products across 5 merchants. Join on product_id.
+  - name: merchants
+    description: Five merchants. policy_text holds refund and licensing terms.
+
+metrics:
+  revenue: >
+    sum(amount) filter (where status = 'completed').
+    Excludes failed and pending. Also excludes refunded, because a refunded
+    order is money returned. If the user explicitly asks for gross or booked
+    revenue including refunds, use status in ('completed','refunded') and 
+    explicitly state that you are including refunded transactions.
+
+  net_revenue: >
+    Same as revenue. There is no fee column in this schema, so do not attempt
+    to compute a take rate or margin — say the data doesn't support it.
+
+  orders: >
+    count(distinct session_id) where status = 'completed'. A basket with three
+    line items is one order, not three. count(*) counts line items, which is a
+    different and usually wrong answer.
+
+  line_items: count(*) — use only when the user asks about items, not orders.
+
+  average_order_value: >
+    revenue / orders, i.e. sum the amount per session first, then average across
+    sessions. Averaging the row-level amount gives average line item value and
+    is a common mistake.
+
+  conversion_rate: >
+    Sessions containing a 'purchase' event divided by total sessions, both from
+    the events table. Never compute this from transactions alone.
+
+  active_user: A user with at least one event in the period being discussed.
+
+  churned_user: >
+    There is no churn flag available to you. If asked about churn, define it
+    behaviourally — for example no events in the last 30 days — and state the
+    definition you used in the answer. Depending on the use case, churn could be
+    defined differently, so if the user asks for a different definition, use that one instead.
+
+  refund_rate: >
+    count(*) filter (where status = 'refunded') / count(*), over transactions in
+    the period.
+
+rules:
+  - Currency is mixed. amount is stored in the row's own currency with no FX
+    conversion available. Never sum amount across different currencies without
+    either filtering to one currency or grouping by currency. If a question
+    implies a single total across countries, group by currency and say why.
+  - status = 'pending' means the payment has not settled. Exclude it from
+    revenue unless asked.
+  - Default to the last 90 days when a question has no time frame, and state
+    that you did.
+  - The dataset is synthetic and runs to the current date. There is no data
+    before the earliest signup_date.
+  - synthetic_user_traits exists but you cannot read it. If a question needs it,
+    say the data isn't available to you rather than inventing a workaround.
+  - When a question is ambiguous between two reasonable readings, pick the more
+    common one, answer it, and note the assumption in one sentence.
+
+examples:
+  - question: What was revenue last month?
+    sql: |
+      select currency, round(sum(amount), 2) as revenue
+      from solera_transactions_enriched
+      where status = 'completed'
+        and transaction_date >= date_trunc('month', current_date - interval '1 month')
+        and transaction_date <  date_trunc('month', current_date)
+      group by currency
+      order by revenue desc;
+
+  - question: Which acquisition channel converts best?
+    sql: |
+      with s as (
+        select e.session_id,
+               min(u.acquisition_channel) as channel,
+               bool_or(e.event_type = 'purchase') as converted
+        from events e
+        join users u using (user_id)
+        group by e.session_id
+      )
+      select channel,
+             count(*) as sessions,
+             round(100.0 * count(*) filter (where converted) / count(*), 1) as conversion_pct
+      from s
+      group by channel
+      order by conversion_pct desc;
+
+  - question: What is our average order value on mobile?
+    sql: |
+      with orders as (
+        select session_id, currency, sum(amount) as order_value
+        from solera_transactions_enriched
+        where status = 'completed' and device_type = 'mobile'
+        group by session_id, currency
+      )
+      select currency, round(avg(order_value), 2) as aov, count(*) as orders
+      from orders
+      group by currency;
