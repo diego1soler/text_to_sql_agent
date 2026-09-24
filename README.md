@@ -1,8 +1,23 @@
 # Solera Text-to-SQL Agent
 
+I built and deployed a system like this against production data at the biggest telecom company in Guatemala. That work isn't public, so this repo rebuilds the same architecture on a synthetic dataset — Solera, a fictional digital marketplace with generated users, events and transactions.
+
+# Solera Text-to-SQL Agent
+
 A LangGraph agent that answers natural-language business questions by writing
 and running its own read-only SQL against a Postgres database, self-correcting
 when a query fails.
+
+Solera is ressembling a real life transactional database of a digital marketplace. 
+Solera is a web-app where users buy products from five in-app merchants. 
+There are fifteen products across subscriptions, one-time purchases, prepaid top-ups and add-ons, 
+priced €4.99 to €249.99. Users move through routes like /home, /marketplace, /checkout and /wallet
+inside the application.
+
+Users could have several behavior through their whole journey with Solera, such as different channels
+driving acquisition, purchase frequency, churn behavior and so on.
+
+All of the products and names inside the fictional Solera database are not real, and any resemblance to reality is purely coincidental.
 
 ```
 $ python agent.py "what was revenue last month, by currency?"
@@ -29,10 +44,9 @@ since amounts aren't FX-converted in this dataset.
 
 Most text-to-SQL demos stop at "LLM writes a query." The interesting problems
 are what happens around that: how does the model know what a metric like
-*revenue* or *conversion rate* actually means in this business, what stops it
-from running something destructive, and what happens when the query it wrote
-is wrong. This project is a small, opinionated answer to those three
-questions.
+*revenue* or *conversion rate* actually means in the specific businnes context, what stops it
+from running something destructive or meaningless, and what happens when the query it wrote
+is wrong. This project aim to answer those question with an agent querying real-world enterprise environment.
 
 ## Architecture
 
@@ -80,14 +94,14 @@ questions.
   to guess what a column implies, and so the schema doesn't cost a
   `list_tables` / `get_schema` round trip on every question.
 
-### Three layers, each doing a different job
+### Three layers of security
 
-1. **Postgres role permissions** — the actual security boundary. Even if
+1. **Postgres role permissions** — the actual security limitation. Even if
    every layer above this had a bug, `solera_agent` cannot write or read
-   restricted tables.
+   restricted tables. Already defined in the role creation inside the database.
 2. **The validator** — not primarily a security layer (layer 1 already
    handles that); its job is to turn a bad query into a *specific, correctable*
-   error instead of an opaque Postgres permission failure.
+   error instead of an Postgres permission failure.
 3. **The system prompt / semantic layer** — steers the model toward correct
    *business logic* (what "revenue" means here), which no amount of SQL
    permissioning can enforce.
@@ -157,7 +171,7 @@ python evals.py --category currency
 python evals.py --repeat 3         # flag flaky cases (verdict changes across runs)
 ```
 
-Three kinds of checks, each catching a different failure mode:
+Three kinds of checks catching a different failure mode:
 - **Hard** — re-runs the agent's SQL and diffs it against a hand-written
   ground-truth query. Gates the exit code.
 - **Structural** — parses the agent's SQL with sqlglot and asserts it queried
@@ -172,14 +186,4 @@ separate "wrong wording" from "wrong understanding"), planted signals with a
 known correct answer, and questions the data genuinely cannot answer — where
 the only correct response is a refusal, not a plausible-looking guess.
 
-## Notes
 
-- The underlying data is synthetic and regenerated to the current date; there
-  is no real user or transaction data behind this project.
-- This is a demo/portfolio project, not a production service: it has no
-  authentication or rate limiting, so don't point a public endpoint at it
-  without adding both.
-
-## License
-
-MIT — see [LICENSE](LICENSE).

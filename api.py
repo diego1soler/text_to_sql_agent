@@ -2,8 +2,6 @@
 
     uvicorn api:app --reload
 
-No auth, no rate limiting: this exposes an LLM key and a database connection,
-so don't point a public deployment at it without adding both.
 """
 
 from __future__ import annotations
