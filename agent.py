@@ -49,7 +49,7 @@ def load_semantic_layer() -> str:
 
 @tool
 def run_sql(query: str) -> str:
-    """Run a read-only SQL query against the Solera Postgres database and return
+    """Run a read-only SQL query to the Solera Postgres database and return
     the results as a table.
 
     Send exactly one SELECT statement. The database is read-only; INSERT,
