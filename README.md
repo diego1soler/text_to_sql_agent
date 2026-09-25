@@ -79,9 +79,9 @@ rate (246 converted sessions out of 904 total). Full ranking: referral 27.2%,
 organic 24.8%, partner 22.9%, paid search 19.3%, paid social 13.3%.
 ```
 
-Note this correctly pulls from `events` rather than `solera_transactions_enriched`
-— transactions alone have no denominator for a conversion rate, which is exactly
-the kind of rule [semantic_layer.yaml](semantic_layer.yaml) exists to encode
+This correctly pulls from `events` rather than the complete `transactions` table.
+Transactions alone have no denominator for a conversion rate, which is exactly
+the set rule on [semantic_layer.yaml](semantic_layer.yaml), 
 (and that [evals.py](evals.py)'s `conversion_rate` case checks for).
 
 ## Why this exists
