@@ -41,6 +41,49 @@ since amounts aren't FX-converted in this dataset.
 --- done (1 run_sql call(s)) ---
 ```
 
+A question that requires joining across tables and picking the right metric
+definition — `python cli.py "..."`, transcript is unedited:
+
+```
+> Which acquisition channel has the best conversion rate?
+
+--- sql ---
+with s as (
+  select e.session_id,
+         min(u.acquisition_channel) as channel,
+         bool_or(e.event_type = 'purchase') as converted
+  from events e
+  join users u using (user_id)
+  group by e.session_id
+)
+select channel,
+       count(*) as sessions,
+       count(*) filter (where converted) as converted_sessions,
+       round(100.0 * count(*) filter (where converted) / count(*), 1) as conversion_pct
+from s
+group by channel
+order by conversion_pct desc;
+-----------
+
+channel     | sessions | converted_sessions | conversion_pct
+---         | ---      | ---                 | ---
+referral    | 904      | 246                 | 27.2
+organic     | 1408     | 349                 | 24.8
+partner     | 507      | 116                 | 22.9
+paid_search | 1464     | 283                 | 19.3
+paid_social | 579      | 77                  | 13.3
+(5 rows, 1182ms)
+
+Referral is the best-performing acquisition channel with a 27.2% conversion
+rate (246 converted sessions out of 904 total). Full ranking: referral 27.2%,
+organic 24.8%, partner 22.9%, paid search 19.3%, paid social 13.3%.
+```
+
+Note this correctly pulls from `events` rather than `solera_transactions_enriched`
+— transactions alone have no denominator for a conversion rate, which is exactly
+the kind of rule [semantic_layer.yaml](semantic_layer.yaml) exists to encode
+(and that [evals.py](evals.py)'s `conversion_rate` case checks for).
+
 ## Why this exists
 
 Most text-to-SQL demos stop at "LLM writes a query." The interesting problems
