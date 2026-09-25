@@ -5,5 +5,3 @@ psycopg[binary]==3.3.5
 sqlglot==30.18.0
 PyYAML==6.0.3
 python-dotenv==1.2.3
-fastapi==0.121.0
-uvicorn==0.38.0

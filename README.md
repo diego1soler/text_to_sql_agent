@@ -84,9 +84,6 @@ is wrong. This project aim to answer those question with an agent querying real-
   (`solera_agent`) that has no write grants at all. Includes a
   `health_check()` you can run standalone to confirm the role is actually
   restricted (blocked tables, blocked DDL) before wiring up the agent.
-- **[api.py](api.py)** — thin FastAPI wrapper (`POST /ask`, `GET /health`)
-  around the same `build_agent()` used by the CLI, for serving this over
-  HTTP. No auth or rate limiting — see [Notes](#notes).
 - **[semantic_layer.yaml](semantic_layer.yaml)** — the business context: table
   and column meanings, and metric definitions (e.g. *revenue* excludes
   refunds and pending payments; *orders* counts sessions, not line items).
@@ -142,22 +139,6 @@ python cli.py --quiet "..."                                     # hide the gener
 [cli.py](cli.py) is the intended entry point. [agent.py](agent.py) can also be
 run directly (`python agent.py "..."`) for a more verbose step-by-step trace
 of the graph while developing.
-
-## API
-
-```bash
-uvicorn api:app --reload
-```
-
-```bash
-curl -X POST localhost:8000/ask -H "Content-Type: application/json" \
-  -d '{"question": "how many orders were completed in the last 90 days?"}'
-# {"answer": "...", "sql": ["select count(distinct session_id) ..."], "run_sql_attempts": 1}
-
-curl localhost:8000/health
-```
-
-Interactive docs at `localhost:8000/docs`.
 
 ## Evals
 
